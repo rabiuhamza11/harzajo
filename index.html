@@ -31,7 +31,6 @@ body { background:#0a0e1a; color:#fff; }
 .input:focus { border-color:#1a8a5e; outline:none; }
 .select { width:100%; padding:12px; background:#0a0e1a; border:1px solid #2a2f3e; border-radius:10px; color:#fff; font-size:14px; margin-bottom:10px; }
 .label { font-size:13px; color:#8892a6; margin-bottom:4px; }
-.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .empty { text-align:center; padding:40px 20px; color:#8892a6; }
 .empty .icon { font-size:48px; margin-bottom:12px; }
 .total-box { background:linear-gradient(135deg,#1a8a5e,#0d6b47); border-radius:16px; padding:20px; text-align:center; margin-bottom:16px; }
@@ -44,22 +43,19 @@ body { background:#0a0e1a; color:#fff; }
 <h1>🔄 HarzAjo</h1>
 <p>Digital Savings Groups — Esusu, Adashe, Ajo</p>
 </div>
-
 <div class="container">
 <div class="tabs">
 <div class="tab active" onclick="switchTab('groups')">My Groups</div>
 <div class="tab" onclick="switchTab('create')">Create Group</div>
 <div class="tab" onclick="switchTab('how')">How It Works</div>
 </div>
-
 <div id="tab-groups">
 <div class="total-box">
 <div class="label">Total Savings Across Groups</div>
-<div class="amount">₦0</div>
+<div class="amount" id="total-savings">₦0</div>
 </div>
 <div id="groups-list"></div>
 </div>
-
 <div id="tab-create" style="display:none">
 <div class="card">
 <h2>Create New Savings Group</h2>
@@ -80,7 +76,6 @@ body { background:#0a0e1a; color:#fff; }
 <button class="btn" onclick="createGroup()">Create Group</button>
 </div>
 </div>
-
 <div id="tab-how" style="display:none">
 <div class="card">
 <h2>How HarzAjo Works</h2>
@@ -105,24 +100,28 @@ body { background:#0a0e1a; color:#fff; }
 </div>
 </div>
 </div>
-
 <script>
 const API='https://superagent-2286fb2f.base44.app/functions/harzAjo';
+function post(data){return fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json())}
 function switchTab(t){document.querySelectorAll('.tab').forEach((e,i)=>{e.classList.toggle('active',i==(['groups','create','how'].indexOf(t)))});['groups','create','how'].forEach(x=>{document.getElementById('tab-'+x).style.display=x==t?'block':'none'})}
 function fmt(n){return '₦'+Number(n||0).toLocaleString()}
 async function loadGroups(){
 try{
-const r=await fetch(API+'?action=list');
-const d=await r.json();
+const d=await post({action:'list'});
 const el=document.getElementById('groups-list');
-if(!d.groups||d.groups.length===0){el.innerHTML='<div class="empty"><div class="icon">🔄</div><p>No groups yet. Create one to get started!</p></div>';return}
-el.innerHTML=d.groups.map(g=>`<div class="card"><h3>${g.name}</h3><div style="margin:8px 0"><span class="badge ${g.status}">${g.status.toUpperCase()}</span></div><div class="stat"><span class="label">Contribution</span><span class="value">${fmt(g.contribution_amount)}</span></div><div class="stat"><span class="label">Frequency</span><span class="value">${g.cycle_frequency}</span></div><div class="stat"><span class="label">Members</span><span class="value">${(g.members||[]).length}/${g.capacity}</span></div><div class="stat"><span class="label">Total Pot</span><span class="value">${fmt((g.contribution_amount||0)*(g.capacity||0))}</span></div><div class="stat"><span class="label">Collected</span><span class="value">${fmt(g.total_collected)}</span></div><div class="stat"><span class="label">Cycle</span><span class="value">${g.current_cycle}/${g.capacity}</span></div></div>`).join('')
-}catch(e){document.getElementById('groups-list').innerHTML='<div class="empty"><div class="icon">🔄</div><p>Tap create to start your first savings group!</p></div>'}
+const groups=d.groups||[];
+let total=0;
+groups.forEach(g=>total+=(g.total_collected||0));
+document.getElementById('total-savings').textContent=fmt(total);
+if(groups.length===0){el.innerHTML='<div class="empty"><div class="icon">🔄</div><p>No groups yet. Create one to get started!</p></div>';return}
+el.innerHTML=groups.map(g=>`<div class="card"><h3>${g.name||'Unnamed Group'}</h3><div style="margin:8px 0"><span class="badge ${g.status}">${(g.status||'recruiting').toUpperCase()}</span></div><div class="stat"><span class="label">Contribution</span><span class="value">${fmt(g.contribution_amount)}</span></div><div class="stat"><span class="label">Frequency</span><span class="value">${g.cycle_frequency||'weekly'}</span></div><div class="stat"><span class="label">Members</span><span class="value">${(g.members||[]).length}/${g.capacity||0}</span></div><div class="stat"><span class="label">Total Pot</span><span class="value">${fmt((g.contribution_amount||0)*(g.capacity||0))}</span></div><div class="stat"><span class="label">Collected</span><span class="value">${fmt(g.total_collected)}</span></div><div class="stat"><span class="label">Cycle</span><span class="value">${g.current_cycle||1}/${g.capacity||0}</span></div>${g.description?`<div style="margin-top:8px;font-size:12px;color:#8892a6">${g.description}</div>`:''}</div>`).join('')
+}catch(e){document.getElementById('groups-list').innerHTML='<div class="empty"><div class="icon">🔄</div><p>Loading... Tap create to start your first savings group!</p></div>'}
 }
 async function createGroup(){
-const body={action:'create',name:document.getElementById('gName').value,description:document.getElementById('gDesc').value,contribution_amount:Number(document.getElementById('gAmount').value),cycle_frequency:document.getElementById('gFreq').value,capacity:Number(document.getElementById('gCap').value),admin_name:'Rabiu Hamza Mohammed',admin_phone:'08028687857'};
-const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-const d=await r.json();
+const name=document.getElementById('gName').value;
+if(!name){alert('Enter a group name');return}
+const body={action:'create',name:name,description:document.getElementById('gDesc').value,contribution_amount:Number(document.getElementById('gAmount').value),cycle_frequency:document.getElementById('gFreq').value,capacity:Number(document.getElementById('gCap').value),admin_name:'Rabiu Hamza Mohammed',admin_phone:'08028687857'};
+const d=await post(body);
 if(d.id){alert('Group created! Share with friends to join.');switchTab('groups');loadGroups()}else{alert('Error: '+(d.error||'Unknown'))}
 }
 loadGroups()
